@@ -20,33 +20,52 @@ namespace MvcMovie.Controllers
         }
 
         // GET: Movies
-        public async Task<IActionResult> Index(string movieGenre, string searchString)
+        public async Task<IActionResult> Index(
+      string sortOrder,
+      string currentFilter,
+      string searchString,
+      int? pageNumber)
         {
-            // Use LINQ to get list of genres.
-            IQueryable<string> genreQuery = from m in _context.Movie
-                                            orderby m.Genre
-                                            select m.Genre;
+            ViewData["CurrentSort"] = sortOrder;
+            ViewData["NameSortParm"] = String.IsNullOrEmpty(sortOrder) ? "name_desc" : "";
+            ViewData["DateSortParm"] = sortOrder == "Date" ? "date_desc" : "Date";
 
-            var movies = from m in _context.Movie
-                         select m;
+            if (searchString != null)
+            {
+                pageNumber = 1;
+            }
+            else
+            {
+                searchString = currentFilter;
+            }
 
-            if (!string.IsNullOrEmpty(searchString))
+            ViewData["CurrentFilter"] = searchString;
+
+            var movies = from s in _context.Movie
+                         select s;
+            if (!String.IsNullOrEmpty(searchString))
             {
                 movies = movies.Where(s => s.Title.Contains(searchString));
+
+            }
+            switch (sortOrder)
+            {
+                case "name_desc":
+                    movies = movies.OrderByDescending(s => s.Title);
+                    break;
+                case "Date":
+                    movies = movies.OrderBy(s => s.ReleaseDate);
+                    break;
+                case "date_desc":
+                    movies = movies.OrderByDescending(s => s.ReleaseDate);
+                    break;
+                default:
+                    movies = movies.OrderBy(s => s.Title);
+                    break;
             }
 
-            if (!string.IsNullOrEmpty(movieGenre))
-            {
-                movies = movies.Where(x => x.Genre == movieGenre);
-            }
-
-            var movieGenreVM = new MovieGenreViewModel
-            {
-                Genres = new SelectList(await genreQuery.Distinct().ToListAsync()),
-                Movies = await movies.ToListAsync()
-            };
-
-            return View(movieGenreVM);
+            int pageSize = 4;
+            return View(await PaginatedList<Movie>.CreateAsync(movies.AsNoTracking(), pageNumber ?? 1, pageSize));
         }
 
         // GET: Movies/Details/5
@@ -57,20 +76,40 @@ namespace MvcMovie.Controllers
                 return NotFound();
             }
 
-            var movie = await _context.Movie
+            ReviewsMovie result = new ReviewsMovie();
+
+            Movie movie = await _context.Movie
                 .FirstOrDefaultAsync(m => m.Id == id);
             if (movie == null)
             {
                 return NotFound();
             }
+            else
+            {
 
-            return View(movie);
+                var reviews = await _context.Reviews.Where(x => x.IdMovie.Equals(id)).ToListAsync();
+                result.Movie = movie;
+                result.Reviews = reviews;
+            }
+            return View(result);
         }
 
         // GET: Movies/Create
         public IActionResult Create()
         {
             return View();
+        }
+
+        public async Task<IActionResult> CreateReview([Bind("Id,IdMovie,Reviewer,Text")] Review review)
+        {
+            review.ReviewDate = DateTime.Now;
+            if (ModelState.IsValid)
+            {
+                _context.Add(review);
+                await _context.SaveChangesAsync();
+                return RedirectToAction(nameof(Index));
+            }
+            return RedirectToAction("Index", "Home");
         }
 
         // POST: Movies/Create

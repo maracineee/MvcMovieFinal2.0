@@ -11,5 +11,6 @@ namespace MvcMovie.Data
         }
 
         public DbSet<Movie> Movie { get; set; }
+        public DbSet<Review> Reviews { get; set; }
     }
 }
